@@ -24,7 +24,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/kubewharf/katalyst-api/pkg/consts"
 	apiconsts "github.com/kubewharf/katalyst-api/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/commonstate"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/dynamicpolicy/state"
@@ -217,7 +216,7 @@ func (p *DynamicPolicy) checkMemorySet() {
 		for containerName, allocationInfo := range containerEntries {
 			if allocationInfo == nil || !allocationInfo.CheckMainContainer() {
 				continue
-			} else if allocationInfo.QoSLevel == consts.PodAnnotationQoSLevelSharedCores &&
+			} else if allocationInfo.QoSLevel == apiconsts.PodAnnotationQoSLevelSharedCores &&
 				p.getContainerRequestedMemoryBytes(allocationInfo) == 0 {
 				general.Warningf("skip memset checking for pod: %s/%s container: %s with zero cpu request",
 					allocationInfo.PodNamespace, allocationInfo.PodName, containerName)
@@ -281,7 +280,7 @@ func (p *DynamicPolicy) checkMemorySet() {
 			}
 
 			switch allocationInfo.QoSLevel {
-			case consts.PodAnnotationQoSLevelDedicatedCores:
+			case apiconsts.PodAnnotationQoSLevelDedicatedCores:
 				if allocationInfo.CheckNumaBinding() {
 					if !memorySetOverlap && cset.Intersection(unionNUMABindingActualMemorySet).Size() != 0 {
 						memorySetOverlap = true
@@ -292,7 +291,7 @@ func (p *DynamicPolicy) checkMemorySet() {
 				} else {
 					unionDedicatedActualMemorySet = unionDedicatedActualMemorySet.Union(cset)
 				}
-			case consts.PodAnnotationQoSLevelSharedCores:
+			case apiconsts.PodAnnotationQoSLevelSharedCores:
 				unionSharedActualMemorySet = unionSharedActualMemorySet.Union(cset)
 			}
 		}

@@ -39,6 +39,8 @@ var validQosEnhancementKey = sets.NewString(
 	apiconsts.PodAnnotationCPUEnhancementKey,
 	apiconsts.PodAnnotationMemoryEnhancementKey,
 	apiconsts.PodAnnotationNetworkEnhancementKey,
+	apiconsts.PodAnnotationMicroTopologyInterPodAffinity,
+	apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity,
 )
 
 // QoSConfiguration stores the qos configurations needed by core katalyst components.
@@ -118,11 +120,15 @@ func (c *QoSConfiguration) FilterQoSAndEnhancement(annotations map[string]string
 	for _, enhancementKey := range validEnhancementKeyList {
 		if annotations[enhancementKey] != "" {
 			enhancementKVs := make(map[string]string)
-
-			err := json.Unmarshal([]byte(annotations[enhancementKey]), &enhancementKVs)
-			if err != nil {
-				return nil, fmt.Errorf("unmarshal %s: %s failed with error: %v",
-					enhancementKey, annotations[enhancementKey], err)
+			if enhancementKey != apiconsts.PodAnnotationMicroTopologyInterPodAffinity &&
+				enhancementKey != apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity {
+				err := json.Unmarshal([]byte(annotations[enhancementKey]), &enhancementKVs)
+				if err != nil {
+					return nil, fmt.Errorf("unmarshal %s: %s failed with error: %v",
+						enhancementKey, annotations[enhancementKey], err)
+				}
+			} else {
+				enhancementKVs[enhancementKey] = annotations[enhancementKey]
 			}
 
 			for key, val := range enhancementKVs {
@@ -132,6 +138,7 @@ func (c *QoSConfiguration) FilterQoSAndEnhancement(annotations map[string]string
 				}
 				filteredAnnotations[key] = val
 			}
+
 		}
 	}
 
