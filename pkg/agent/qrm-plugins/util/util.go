@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -407,7 +406,7 @@ func MergeNumaInfoMap(podLabels map[string]string, numaLabels map[string][]strin
 	for key, val := range podLabels {
 		if numaLabels[key] != nil {
 			for _, label := range numaLabels[key] {
-				if reflect.DeepEqual(label, val) {
+				if label == val {
 					break
 				}
 			}
