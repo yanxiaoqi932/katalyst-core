@@ -2107,8 +2107,7 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 		dynamicPolicy, err := getTestDynamicPolicyWithInitialization(cpuTopology, tmpDir)
 		as.Nil(err)
 
-		dynamicPolicy.qosConfig.SetExpandQoSLevelSelector(consts.PodAnnotationQoSLevelDedicatedCores,
-			map[string]string{affinityKey: affinityValue, antiAffinityKey: antiAffinityValue})
+		dynamicPolicy.qosConfig.SetNUMAInterPodAffinityLabelsSelector(map[string]string{affinityKey: affinityValue, antiAffinityKey: antiAffinityValue})
 
 		machineState := dynamicPolicy.state.GetMachineState()
 		for i, alloInfo := range allocationList {

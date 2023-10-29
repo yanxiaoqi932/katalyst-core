@@ -71,6 +71,10 @@ type QoSConfiguration struct {
 	// the key here is specific enhancement key such as "numa_binding", "numa_exclusive"
 	// the value is the default value of the key
 	EnhancementDefaultValues map[string]string
+
+	// NUMAInterPodAffinityLabelsSeletor is used to match specified labels about numa
+	// level inter-pod affinity & antiaffinity
+	NUMAInterPodAffinityLabelsSeletor map[string]string
 }
 
 // NewQoSConfiguration creates a new qos configuration.
@@ -166,6 +170,13 @@ func (c *QoSConfiguration) FilterQoSMap(annotations map[string]string) map[strin
 			if val, ok := annotations[qosExpand]; ok {
 				filteredAnnotations[qosExpand] = val
 			}
+		}
+	}
+
+	// labels set for numa level inter-pod affinity
+	for key := range c.NUMAInterPodAffinityLabelsSeletor {
+		if val, ok := annotations[key]; ok {
+			filteredAnnotations[key] = val
 		}
 	}
 
@@ -328,6 +339,14 @@ func (c *QoSConfiguration) SetEnhancementDefaultValues(enhancementDefaultValues 
 	c.Lock()
 	defer c.Unlock()
 	c.EnhancementDefaultValues = general.MergeMap(c.EnhancementDefaultValues, enhancementDefaultValues)
+}
+
+// SetNUMAInterPodAffinityLabelsSelector set labels for NUMA-level inter-pod affinity
+func (c *QoSConfiguration) SetNUMAInterPodAffinityLabelsSelector(affinityLabels map[string]string) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.NUMAInterPodAffinityLabelsSeletor = general.MergeMap(c.NUMAInterPodAffinityLabelsSeletor, affinityLabels)
 }
 
 // checkQosMatched is a unified helper function to judge whether annotation
