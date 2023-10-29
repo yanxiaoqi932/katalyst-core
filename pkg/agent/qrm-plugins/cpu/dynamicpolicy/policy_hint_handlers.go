@@ -18,7 +18,6 @@ package dynamicpolicy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -38,7 +37,7 @@ import (
 
 // Record all numa level affinity information on numa
 type numaInfo struct {
-	labels                        map[string]string
+	labels                        map[string][]string
 	socketID                      int
 	numaID                        int
 	AntiAffinityRequiredSelectors []apiconsts.Selector
@@ -50,14 +49,14 @@ type podInfo struct {
 	AffinityRequiredSelectors     []apiconsts.Selector
 	AntiAffinityRequiredSelectors []apiconsts.Selector
 }
-type topologyAffinityCount map[int]int
+
 type preFilterState struct {
 	// A map of topology pairs to the number of existing pods that has anti-affinity seletor that match the "pod".
-	existingAntiAffinityCounts topologyAffinityCount
+	existingAntiAffinityCounts util.TopologyAffinityCount
 	// A map of topology pairs to the number of existing pods that match the affinity seletor of the "pod".
-	affinityCounts topologyAffinityCount
+	affinityCounts util.TopologyAffinityCount
 	// A map of topology pairs to the number of existing pods that match the anti-affinity seletor of the "pod".
-	antiAffinityCounts   topologyAffinityCount
+	antiAffinityCounts   util.TopologyAffinityCount
 	podAffinityInfo      podInfo
 	numaAffinityInfoList []numaInfo
 }
@@ -274,19 +273,19 @@ func (p *DynamicPolicy) getNumaNodesAffinityInfo() ([]numaInfo, error) {
 	for i := 0; i < p.machineInfo.CPUTopology.NumNUMANodes; i++ {
 		var numaNodeInfo numaInfo
 		numaNodeInfo.numaID = i
+		numaNodeInfo.labels = make(map[string][]string)
 		cpuSet := p.machineInfo.CPUTopology.CPUDetails.SocketsInNUMANodes(i)
 		if cpuSet.Size() == 0 {
-			return nil, fmt.Errorf("failed to find the associated socket ID for the specified numanode: %d, cpuDetails: %v",
-				i, p.machineInfo.CPUTopology.CPUDetails)
+			return nil, fmt.Errorf("failed to find the associated socket ID for the specified numanode: %d, cpuDetails: %v", i, p.machineInfo.CPUTopology.CPUDetails)
 		}
 		numaNodeInfo.socketID = cpuSet.ToSliceInt()[0]
 
 		numaState := numaResourceMap[i]
 		for _, containerEntries := range numaState.PodEntries {
 			for _, allocationInfo := range containerEntries {
-				numaNodeInfo.labels = general.MergeMap(numaNodeInfo.labels, allocationInfo.Labels)
+				numaNodeInfo.labels = util.MergeNumaInfoMap(allocationInfo.Labels, numaNodeInfo.labels)
 				if allocationInfo.Annotations[apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity] != "" {
-					podAffinity, err := unmarshalAffinity(allocationInfo.Annotations)
+					podAffinity, err := util.UnmarshalAffinity(allocationInfo.Annotations)
 					if err != nil {
 						return nil, fmt.Errorf("unmarshalAffinity failed")
 					}
@@ -305,10 +304,11 @@ func (p *DynamicPolicy) getNumaNodesAffinityInfo() ([]numaInfo, error) {
 	return numaNodesInfo, nil
 }
 
-// Calculate numa nodes' topologyAffinityCount through imformation of Seletors and labels
-func (p *DynamicPolicy) matchAffinity(Seletors []apiconsts.Selector,
-	labels map[string]string, socket int, numa int) topologyAffinityCount {
-	topologyMap := make(topologyAffinityCount)
+// Analyze whether the existing pod on NUMA is compatible with the new pod,
+// and calculate numa nodes' util.TopologyAffinityCount through imformation of Seletors and labels
+func (p *DynamicPolicy) matchNUMAAffinity(Seletors []apiconsts.Selector,
+	labels map[string]string, socket int, numa int) util.TopologyAffinityCount {
+	topologyMap := make(util.TopologyAffinityCount)
 	for _, seletor := range Seletors {
 		for key, value := range seletor.MatchLabels {
 			if labels[key] == value {
@@ -327,11 +327,37 @@ func (p *DynamicPolicy) matchAffinity(Seletors []apiconsts.Selector,
 	return topologyMap
 }
 
+// Analyze whether the new pod is compatible with the existing pod on NUMA,
+// Calculate numa nodes' util.TopologyAffinityCount through imformation of Seletors and labels
+func (p *DynamicPolicy) matchPodAffinity(Seletors []apiconsts.Selector,
+	labels map[string][]string, socket int, numa int) util.TopologyAffinityCount {
+	topologyMap := make(util.TopologyAffinityCount)
+	for _, seletor := range Seletors {
+		for key, value := range seletor.MatchLabels {
+			for _, numaVal := range labels[key] {
+				if numaVal == value {
+					if seletor.Zone == apiconsts.PodAnnotationMicroTopologyAffinitySocket {
+						cpuSet := p.machineInfo.CPUTopology.CPUDetails.NUMANodesInSockets(socket)
+						numaList := cpuSet.ToSliceInt()
+						for _, n := range numaList {
+							topologyMap[n] += 1
+						}
+					} else {
+						topologyMap[numa] += 1
+					}
+				}
+			}
+
+		}
+	}
+	return topologyMap
+}
+
 // Calculate the number of existing pods that has anti-affinity seletor that match the "pod",
-// and update the topologyAffinityCount imformation
+// and update the util.TopologyAffinityCount imformation
 func (p *DynamicPolicy) getExistingAntiAffinityCounts(state *preFilterState) {
 	numNUMA := len(state.numaAffinityInfoList)
-	topologyMaps := make([]topologyAffinityCount, numNUMA)
+	topologyMaps := make([]util.TopologyAffinityCount, numNUMA)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numNUMA; i++ {
@@ -339,7 +365,7 @@ func (p *DynamicPolicy) getExistingAntiAffinityCounts(state *preFilterState) {
 		go func(numaID int) {
 			defer wg.Done()
 			numaAffinity := state.numaAffinityInfoList[numaID]
-			topologyMaps[numaID] = p.matchAffinity(numaAffinity.AntiAffinityRequiredSelectors,
+			topologyMaps[numaID] = p.matchNUMAAffinity(numaAffinity.AntiAffinityRequiredSelectors,
 				state.podAffinityInfo.labels, numaAffinity.socketID, numaAffinity.numaID)
 		}(i)
 	}
@@ -347,16 +373,16 @@ func (p *DynamicPolicy) getExistingAntiAffinityCounts(state *preFilterState) {
 	wg.Wait()
 
 	for i := 0; i < numNUMA; i++ {
-		state.existingAntiAffinityCounts.append(topologyMaps[i])
+		state.existingAntiAffinityCounts.Append(topologyMaps[i])
 	}
 
 }
 
 // Calculate the number of existing pods that match the anti-affinity seletor of the "pod",
-// and update the topologyAffinityCount imformation
+// and update the util.TopologyAffinityCount imformation
 func (p *DynamicPolicy) getAntiAffinityCounts(state *preFilterState) {
 	numNUMA := len(state.numaAffinityInfoList)
-	topologyMaps := make([]topologyAffinityCount, numNUMA)
+	topologyMaps := make([]util.TopologyAffinityCount, numNUMA)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numNUMA; i++ {
@@ -364,7 +390,7 @@ func (p *DynamicPolicy) getAntiAffinityCounts(state *preFilterState) {
 		go func(numaID int) {
 			defer wg.Done()
 			numaAffinity := state.numaAffinityInfoList[numaID]
-			topologyMaps[numaID] = p.matchAffinity(state.podAffinityInfo.AntiAffinityRequiredSelectors,
+			topologyMaps[numaID] = p.matchPodAffinity(state.podAffinityInfo.AntiAffinityRequiredSelectors,
 				numaAffinity.labels, numaAffinity.socketID, numaAffinity.numaID)
 		}(i)
 	}
@@ -372,16 +398,16 @@ func (p *DynamicPolicy) getAntiAffinityCounts(state *preFilterState) {
 	wg.Wait()
 
 	for i := 0; i < numNUMA; i++ {
-		state.antiAffinityCounts.append(topologyMaps[i])
+		state.antiAffinityCounts.Append(topologyMaps[i])
 	}
 
 }
 
 // Calculate the number of existing pods that match the affinity seletor of the "pod",
-// and update the topologyAffinityCount imformation
+// and update the util.TopologyAffinityCount imformation
 func (p *DynamicPolicy) getAffinityCounts(state *preFilterState) {
 	numNUMA := len(state.numaAffinityInfoList)
-	topologyMaps := make([]topologyAffinityCount, numNUMA)
+	topologyMaps := make([]util.TopologyAffinityCount, numNUMA)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numNUMA; i++ {
@@ -389,7 +415,7 @@ func (p *DynamicPolicy) getAffinityCounts(state *preFilterState) {
 		go func(numaID int) {
 			defer wg.Done()
 			numaAffinity := state.numaAffinityInfoList[numaID]
-			topologyMaps[numaID] = p.matchAffinity(state.podAffinityInfo.AffinityRequiredSelectors,
+			topologyMaps[numaID] = p.matchPodAffinity(state.podAffinityInfo.AffinityRequiredSelectors,
 				numaAffinity.labels, numaAffinity.socketID, numaAffinity.numaID)
 		}(i)
 	}
@@ -397,13 +423,13 @@ func (p *DynamicPolicy) getAffinityCounts(state *preFilterState) {
 	wg.Wait()
 
 	for i := 0; i < numNUMA; i++ {
-		state.affinityCounts.append(topologyMaps[i])
+		state.affinityCounts.Append(topologyMaps[i])
 	}
 
 }
 
 func (p *DynamicPolicy) prePodAffinityFilter(req *pluginapi.ResourceRequest) (*preFilterState, error) {
-	podAffinity, err := unmarshalAffinity(req.Annotations)
+	podAffinity, err := util.UnmarshalAffinity(req.Annotations)
 	if err != nil {
 		return nil, err
 	}
@@ -416,20 +442,21 @@ func (p *DynamicPolicy) prePodAffinityFilter(req *pluginapi.ResourceRequest) (*p
 		}
 		return nil, nil
 	}
+
 	// Get affinityInfo of all numa nodes and the pod to be binded
 	numaAffinityInfoList, err := p.getNumaNodesAffinityInfo()
 	if err != nil {
 		return nil, err
 	}
-	podAffinityInfo := requiredPodAffinityInfo(podAffinity, req)
+	podAffinityInfo := p.requiredPodAffinityInfo(podAffinity, req)
 
-	// Calculate topologyAffinityCount imformation
+	// Calculate util.TopologyAffinityCount imformation
 	var state = preFilterState{
 		podAffinityInfo:            podAffinityInfo,
 		numaAffinityInfoList:       numaAffinityInfoList,
-		existingAntiAffinityCounts: make(topologyAffinityCount),
-		antiAffinityCounts:         make(topologyAffinityCount),
-		affinityCounts:             make(topologyAffinityCount),
+		existingAntiAffinityCounts: make(util.TopologyAffinityCount),
+		antiAffinityCounts:         make(util.TopologyAffinityCount),
+		affinityCounts:             make(util.TopologyAffinityCount),
 	}
 	p.getExistingAntiAffinityCounts(&state)
 	p.getAntiAffinityCounts(&state)
@@ -476,53 +503,7 @@ func (p *DynamicPolicy) podAffinityFilter(state *preFilterState,
 	return filterdHints
 }
 
-func unmarshalAffinity(annotations map[string]string) (*MicroTopologyPodAffnity, error) {
-	AffinityStrList := []string{apiconsts.PodAnnotationMicroTopologyInterPodAffinity, apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity}
-	AffinityMap := make(map[string]*apiconsts.MicroTopologyPodAffinityAnnotation)
-
-	for _, affinityStr := range AffinityStrList {
-		if annotations[affinityStr] != "" {
-			var affinity *apiconsts.MicroTopologyPodAffinityAnnotation
-			if err := json.Unmarshal([]byte(annotations[affinityStr]), &affinity); err != nil {
-				return nil, fmt.Errorf("unmarshal %s: %s failed with error: %v",
-					affinityStr, annotations[affinityStr], err)
-			}
-
-			for j, content := range affinity.Required {
-				// matchLabel必须要有内容
-				if content.MatchLabels == nil {
-					return nil, fmt.Errorf("MatchLabels of %s:%v can not be nil", affinityStr, affinity)
-				}
-				// zone默认为numa
-				if content.Zone == "" {
-					affinity.Required[j].Zone = apiconsts.PodAnnotationMicroTopologyAffinityDefaultZone
-				}
-				if content.Zone != "" && content.Zone != apiconsts.PodAnnotationMicroTopologyAffinitySocket &&
-					content.Zone != apiconsts.PodAnnotationMicroTopologyAffinityNUMA {
-					return nil, fmt.Errorf("zone must be numa or socket")
-				}
-			}
-			for j, content := range affinity.Preferred {
-				if content.MatchLabels == nil {
-					return nil, fmt.Errorf("MatchLabels of %s:%v can not be nil", affinityStr, affinity)
-				}
-				if content.Zone == "" {
-					affinity.Required[j].Zone = apiconsts.PodAnnotationMicroTopologyAffinityDefaultZone
-				}
-			}
-
-			AffinityMap[affinityStr] = affinity
-
-		}
-	}
-
-	return &MicroTopologyPodAffnity{
-		Affinity:     AffinityMap[apiconsts.PodAnnotationMicroTopologyInterPodAffinity],
-		AntiAffinity: AffinityMap[apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity],
-	}, nil
-}
-
-func requiredPodAffinityInfo(podAffinity *MicroTopologyPodAffnity, req *pluginapi.ResourceRequest) podInfo {
+func (p *DynamicPolicy) requiredPodAffinityInfo(podAffinity *util.MicroTopologyPodAffnity, req *pluginapi.ResourceRequest) podInfo {
 	var affinityReq []apiconsts.Selector
 	var antiAffinityReq []apiconsts.Selector
 	if podAffinity.Affinity != nil {
@@ -535,11 +516,5 @@ func requiredPodAffinityInfo(podAffinity *MicroTopologyPodAffnity, req *pluginap
 		labels:                        req.Labels,
 		AffinityRequiredSelectors:     affinityReq,
 		AntiAffinityRequiredSelectors: antiAffinityReq,
-	}
-}
-
-func (t topologyAffinityCount) append(toAppend topologyAffinityCount) {
-	for key, value := range toAppend {
-		t[key] += value
 	}
 }

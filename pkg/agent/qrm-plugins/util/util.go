@@ -21,21 +21,30 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 
+	apiconsts "github.com/kubewharf/katalyst-api/pkg/consts"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/klog/v2"
 	kubeletconfigv1beta1 "k8s.io/kubelet/config/v1beta1"
 	pluginapi "k8s.io/kubelet/pkg/apis/resourceplugin/v1alpha1"
 
-	"github.com/kubewharf/katalyst-api/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/config/generic"
 	"github.com/kubewharf/katalyst-core/pkg/util/asyncworker"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 )
+
+// Pod's inter-pod affinity & anti-affinity seletor at NUMA level
+type MicroTopologyPodAffnity struct {
+	Affinity     *apiconsts.MicroTopologyPodAffinityAnnotation
+	AntiAffinity *apiconsts.MicroTopologyPodAffinityAnnotation
+}
+
+type TopologyAffinityCount map[int]int
 
 // GetQuantityFromResourceReq parses resources quantity into value,
 // since pods with reclaimed_cores and un-reclaimed_cores have different
@@ -49,9 +58,9 @@ func GetQuantityFromResourceReq(req *pluginapi.ResourceRequest) (int, error) {
 		switch key {
 		case string(v1.ResourceCPU):
 			return general.Max(int(math.Ceil(req.ResourceRequests[key])), 0), nil
-		case string(consts.ReclaimedResourceMilliCPU):
+		case string(apiconsts.ReclaimedResourceMilliCPU):
 			return general.Max(int(math.Ceil(req.ResourceRequests[key]/1000.0)), 0), nil
-		case string(v1.ResourceMemory), string(consts.ReclaimedResourceMemory), string(consts.ResourceNetBandwidth):
+		case string(v1.ResourceMemory), string(apiconsts.ReclaimedResourceMemory), string(apiconsts.ResourceNetBandwidth):
 			return general.Max(int(math.Ceil(req.ResourceRequests[key])), 0), nil
 		default:
 			return 0, fmt.Errorf("invalid request resource name: %s", key)
@@ -90,7 +99,7 @@ func GetKatalystQoSLevelFromResourceReq(qosConf *generic.QoSConfiguration, req *
 	if req.Annotations == nil {
 		req.Annotations = make(map[string]string)
 	}
-	req.Annotations[consts.PodAnnotationQoSLevelKey] = qosLevel
+	req.Annotations[apiconsts.PodAnnotationQoSLevelKey] = qosLevel
 	parsedAnnotations, err := qosConf.FilterQoSAndEnhancement(req.Annotations)
 	if err != nil {
 		err = fmt.Errorf("ParseKatalystAnnotations failed with error: %v", err)
@@ -101,7 +110,7 @@ func GetKatalystQoSLevelFromResourceReq(qosConf *generic.QoSConfiguration, req *
 	if req.Labels == nil {
 		req.Labels = make(map[string]string)
 	}
-	req.Labels[consts.PodAnnotationQoSLevelKey] = qosLevel
+	req.Labels[apiconsts.PodAnnotationQoSLevelKey] = qosLevel
 	req.Labels = qosConf.FilterQoSMap(req.Labels)
 	return
 }
@@ -346,4 +355,72 @@ func GetKubeletReservedQuantity(resourceName string, klConfig *kubeletconfigv1be
 	}
 
 	return *reservedQuantity, found, nil
+}
+
+func UnmarshalAffinity(annotations map[string]string) (*MicroTopologyPodAffnity, error) {
+	AffinityStrList := []string{apiconsts.PodAnnotationMicroTopologyInterPodAffinity, apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity}
+	AffinityMap := make(map[string]*apiconsts.MicroTopologyPodAffinityAnnotation)
+
+	for _, affinityStr := range AffinityStrList {
+		if annotations[affinityStr] != "" {
+			var affinity *apiconsts.MicroTopologyPodAffinityAnnotation
+			if err := json.Unmarshal([]byte(annotations[affinityStr]), &affinity); err != nil {
+				return nil, fmt.Errorf("unmarshal %s: %s failed with error: %v",
+					affinityStr, annotations[affinityStr], err)
+			}
+
+			for j, content := range affinity.Required {
+				// matchLabel must has content
+				if content.MatchLabels == nil {
+					return nil, fmt.Errorf("MatchLabels of %s:%v can not be nil", affinityStr, affinity)
+				}
+				// Zone defaults to numa
+				if content.Zone == "" {
+					affinity.Required[j].Zone = apiconsts.PodAnnotationMicroTopologyAffinityDefaultZone
+				}
+				if content.Zone != "" && content.Zone != apiconsts.PodAnnotationMicroTopologyAffinitySocket &&
+					content.Zone != apiconsts.PodAnnotationMicroTopologyAffinityNUMA {
+					return nil, fmt.Errorf("zone must be numa or socket")
+				}
+			}
+			for j, content := range affinity.Preferred {
+				if content.MatchLabels == nil {
+					return nil, fmt.Errorf("MatchLabels of %s:%v can not be nil", affinityStr, affinity)
+				}
+				if content.Zone == "" {
+					affinity.Required[j].Zone = apiconsts.PodAnnotationMicroTopologyAffinityDefaultZone
+				}
+			}
+
+			AffinityMap[affinityStr] = affinity
+
+		}
+	}
+
+	return &MicroTopologyPodAffnity{
+		Affinity:     AffinityMap[apiconsts.PodAnnotationMicroTopologyInterPodAffinity],
+		AntiAffinity: AffinityMap[apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity],
+	}, nil
+}
+
+func MergeNumaInfoMap(podLabels map[string]string, numaLabels map[string][]string) map[string][]string {
+	for key, val := range podLabels {
+		if numaLabels[key] != nil {
+			for _, label := range numaLabels[key] {
+				if reflect.DeepEqual(label, val) {
+					break
+				}
+			}
+			numaLabels[key] = append(numaLabels[key], val)
+			continue
+		}
+		numaLabels[key] = []string{val}
+	}
+	return numaLabels
+}
+
+func (t TopologyAffinityCount) Append(toAppend TopologyAffinityCount) {
+	for key, value := range toAppend {
+		t[key] += value
+	}
 }
