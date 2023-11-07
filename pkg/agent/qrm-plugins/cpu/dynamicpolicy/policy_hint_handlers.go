@@ -128,7 +128,7 @@ func (p *DynamicPolicy) dedicatedCoresWithNUMABindingHintHandler(_ context.Conte
 		}
 	}
 
-	// start inter-pod affinity & anti-affintiy selection at numa level
+	// start inter-pod affinity & anti-affinitiy selection at numa level
 	state, err := p.prePodAffinityFilter(req)
 	if err != nil {
 		hints := make(map[string]*pluginapi.ListOfTopologyHints)
