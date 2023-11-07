@@ -278,8 +278,8 @@ func TestUnmarshalAffinityAnnotation(t *testing.T) {
 			description: "affinity with matchLabel",
 			annotations: map[string]string{consts.PodAnnotationMicroTopologyInterPodAffinity: `{"required": [{"matchLabels": {"k": "v", "k2": "v2"}, "zone":"numa"}]}`},
 			expectResp: &MicroTopologyPodAffnity{
-				Affinity: &consts.MicroTopologyPodAffinityAnnotation{
-					Required: []consts.Selector{
+				Affinity: &MicroTopologyPodAffinityAnnotation{
+					Required: []Selector{
 						{
 							MatchLabels: map[string]string{"k": "v", "k2": "v2"},
 							Zone:        "numa",
@@ -295,8 +295,8 @@ func TestUnmarshalAffinityAnnotation(t *testing.T) {
 			annotations: map[string]string{consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"k": "v", "k2": "v2"}, "zone":"numa"}]}`},
 			expectResp: &MicroTopologyPodAffnity{
 				Affinity: nil,
-				AntiAffinity: &consts.MicroTopologyPodAffinityAnnotation{
-					Required: []consts.Selector{
+				AntiAffinity: &MicroTopologyPodAffinityAnnotation{
+					Required: []Selector{
 						{
 							MatchLabels: map[string]string{"k": "v", "k2": "v2"},
 							Zone:        "numa",
@@ -311,8 +311,8 @@ func TestUnmarshalAffinityAnnotation(t *testing.T) {
 			annotations: map[string]string{consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"k": "v", "k2": "v2"}}]}`},
 			expectResp: &MicroTopologyPodAffnity{
 				Affinity: nil,
-				AntiAffinity: &consts.MicroTopologyPodAffinityAnnotation{
-					Required: []consts.Selector{
+				AntiAffinity: &MicroTopologyPodAffinityAnnotation{
+					Required: []Selector{
 						{
 							MatchLabels: map[string]string{"k": "v", "k2": "v2"},
 							Zone:        "numa",
