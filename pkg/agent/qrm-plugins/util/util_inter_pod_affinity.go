@@ -27,10 +27,20 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 )
 
+// Inter-pod affinity annotations
+type Selector struct {
+	MatchLabels map[string]string
+	Zone        string
+}
+type MicroTopologyPodAffinityAnnotation struct {
+	Required  []Selector
+	Preferred []Selector
+}
+
 // Pod's inter-pod affinity & anti-affinity seletor at NUMA level
 type MicroTopologyPodAffnity struct {
-	Affinity     *apiconsts.MicroTopologyPodAffinityAnnotation
-	AntiAffinity *apiconsts.MicroTopologyPodAffinityAnnotation
+	Affinity     *MicroTopologyPodAffinityAnnotation
+	AntiAffinity *MicroTopologyPodAffinityAnnotation
 }
 
 type TopologyAffinityCount map[int]int
@@ -40,14 +50,14 @@ type NumaInfo struct {
 	Labels                        map[string][]string
 	SocketID                      int
 	NumaID                        int
-	AntiAffinityRequiredSelectors []apiconsts.Selector
+	AntiAffinityRequiredSelectors []Selector
 }
 
 // Record numa level affinity information on pod
 type PodInfo struct {
 	Labels                        map[string]string
-	AffinityRequiredSelectors     []apiconsts.Selector
-	AntiAffinityRequiredSelectors []apiconsts.Selector
+	AffinityRequiredSelectors     []Selector
+	AntiAffinityRequiredSelectors []Selector
 }
 
 type PreFilterState struct {
@@ -63,11 +73,11 @@ type PreFilterState struct {
 
 func UnmarshalAffinity(annotations map[string]string) (*MicroTopologyPodAffnity, error) {
 	AffinityStrList := []string{apiconsts.PodAnnotationMicroTopologyInterPodAffinity, apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity}
-	AffinityMap := make(map[string]*apiconsts.MicroTopologyPodAffinityAnnotation)
+	AffinityMap := make(map[string]*MicroTopologyPodAffinityAnnotation)
 
 	for _, affinityStr := range AffinityStrList {
 		if annotations[affinityStr] != "" {
-			var affinity *apiconsts.MicroTopologyPodAffinityAnnotation
+			var affinity *MicroTopologyPodAffinityAnnotation
 			if err := json.Unmarshal([]byte(annotations[affinityStr]), &affinity); err != nil {
 				return nil, fmt.Errorf("unmarshal %s: %s failed with error: %v",
 					affinityStr, annotations[affinityStr], err)
@@ -125,7 +135,7 @@ func MergeNumaInfoMap(podLabels map[string]string, numaLabels map[string][]strin
 
 // Analyze whether the existing pod on NUMA is compatible with the new pod,
 // and calculate numa nodes' util.TopologyAffinityCount through imformation of Seletors and labels
-func matchNUMAAffinity(Seletors []apiconsts.Selector, labels map[string]string,
+func matchNUMAAffinity(Seletors []Selector, labels map[string]string,
 	socket int, numa int, cpuSet machine.CPUSet) TopologyAffinityCount {
 	topologyMap := make(TopologyAffinityCount)
 	for _, seletor := range Seletors {
@@ -147,7 +157,7 @@ func matchNUMAAffinity(Seletors []apiconsts.Selector, labels map[string]string,
 
 // Analyze whether the new pod is compatible with the existing pod on NUMA,
 // Calculate numa nodes' util.TopologyAffinityCount through imformation of Seletors and labels
-func matchPodAffinity(Seletors []apiconsts.Selector, labels map[string][]string,
+func matchPodAffinity(Seletors []Selector, labels map[string][]string,
 	socket int, numa int, numaSet machine.CPUSet) TopologyAffinityCount {
 	topologyMap := make(TopologyAffinityCount)
 	for _, seletor := range Seletors {
@@ -267,8 +277,8 @@ func HintPodAffinityFilter(state *PreFilterState, hint *pluginapi.TopologyHint) 
 }
 
 func RequiredPodAffinityInfo(podAffinity *MicroTopologyPodAffnity, req *pluginapi.ResourceRequest) PodInfo {
-	var affinityReq []apiconsts.Selector
-	var antiAffinityReq []apiconsts.Selector
+	var affinityReq []Selector
+	var antiAffinityReq []Selector
 	if podAffinity.Affinity != nil {
 		affinityReq = podAffinity.Affinity.Required
 	}
