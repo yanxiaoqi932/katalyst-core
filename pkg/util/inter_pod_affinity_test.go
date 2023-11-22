@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kubewharf/katalyst-api/pkg/consts"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kubewharf/katalyst-api/pkg/consts"
 )
 
 func TestUnmarshalAffinityAnnotation(t *testing.T) {

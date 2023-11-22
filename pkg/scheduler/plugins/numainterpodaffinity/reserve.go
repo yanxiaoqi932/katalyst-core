@@ -19,10 +19,11 @@ package numainterpodaffinity
 import (
 	"context"
 
-	"github.com/kubewharf/katalyst-core/pkg/scheduler/cache"
-	schedulerUtil "github.com/kubewharf/katalyst-core/pkg/scheduler/util"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
+
+	"github.com/kubewharf/katalyst-core/pkg/scheduler/cache"
+	schedulerUtil "github.com/kubewharf/katalyst-core/pkg/scheduler/util"
 )
 
 func (na *NUMAInterPodAffinity) Reserve(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) *framework.Status {

@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +33,6 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/config/generic"
 	"github.com/kubewharf/katalyst-core/pkg/scheduler/cache"
 	"github.com/kubewharf/katalyst-core/pkg/scheduler/util"
-	"github.com/stretchr/testify/assert"
 )
 
 func newTestSharedListerForReserve(pods []*v1.Pod, nodes []*v1.Node) *testSharedLister {
