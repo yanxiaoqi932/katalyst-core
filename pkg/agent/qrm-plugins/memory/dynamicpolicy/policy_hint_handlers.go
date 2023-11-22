@@ -18,6 +18,7 @@ package dynamicpolicy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -27,7 +28,8 @@ import (
 
 	apiconsts "github.com/kubewharf/katalyst-api/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/dynamicpolicy/state"
-	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
+	qrmutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
+	"github.com/kubewharf/katalyst-core/pkg/util"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	qosutil "github.com/kubewharf/katalyst-core/pkg/util/qos"
@@ -39,7 +41,7 @@ func (p *DynamicPolicy) sharedCoresHintHandler(_ context.Context,
 		return nil, fmt.Errorf("got nil request")
 	}
 
-	return util.PackResourceHintsResponse(req, string(v1.ResourceMemory),
+	return qrmutil.PackResourceHintsResponse(req, string(v1.ResourceMemory),
 		map[string]*pluginapi.ListOfTopologyHints{
 			string(v1.ResourceMemory): nil, // indicates that there is no numa preference
 		})
@@ -69,13 +71,13 @@ func (p *DynamicPolicy) dedicatedCoresWithNUMABindingHintHandler(_ context.Conte
 	// currently, we set cpuset of sidecar to the cpuset of its main container,
 	// so there is no numa preference here.
 	if req.ContainerType == pluginapi.ContainerType_SIDECAR {
-		return util.PackResourceHintsResponse(req, string(v1.ResourceMemory),
+		return qrmutil.PackResourceHintsResponse(req, string(v1.ResourceMemory),
 			map[string]*pluginapi.ListOfTopologyHints{
 				string(v1.ResourceMemory): nil,
 			})
 	}
 
-	reqInt, err := util.GetQuantityFromResourceReq(req)
+	reqInt, err := qrmutil.GetQuantityFromResourceReq(req)
 	if err != nil {
 		return nil, fmt.Errorf("getReqQuantityFromResourceReq failed with error: %v", err)
 	}
@@ -112,7 +114,7 @@ func (p *DynamicPolicy) dedicatedCoresWithNUMABindingHintHandler(_ context.Conte
 		availableNUMAs := resourcesMachineState[v1.ResourceMemory].GetNUMANodesWithoutNUMABindingPods()
 
 		var extraErr error
-		hints, extraErr = util.GetHintsFromExtraStateFile(req.PodName, string(v1.ResourceMemory),
+		hints, extraErr = qrmutil.GetHintsFromExtraStateFile(req.PodName, string(v1.ResourceMemory),
 			p.extraStateFileAbsPath, availableNUMAs)
 		if extraErr != nil {
 			general.Infof("pod: %s/%s, container: %s GetHintsFromExtraStateFile failed with error: %v",
@@ -135,15 +137,15 @@ func (p *DynamicPolicy) dedicatedCoresWithNUMABindingHintHandler(_ context.Conte
 	if err != nil {
 		hints := make(map[string]*pluginapi.ListOfTopologyHints)
 		hints[string(v1.ResourceMemory)] = nil
-		resp, _ := util.PackResourceHintsResponse(req, string(v1.ResourceMemory), hints)
+		resp, _ := qrmutil.PackResourceHintsResponse(req, string(v1.ResourceMemory), hints)
 		return resp, err
 	}
 	if state == nil {
-		return util.PackResourceHintsResponse(req, string(v1.ResourceMemory), hints)
+		return qrmutil.PackResourceHintsResponse(req, string(v1.ResourceMemory), hints)
 	}
 	filterdHints := p.podAffinityFilter(state, hints)
 
-	return util.PackResourceHintsResponse(req, string(v1.ResourceMemory), filterdHints)
+	return qrmutil.PackResourceHintsResponse(req, string(v1.ResourceMemory), filterdHints)
 }
 
 func (p *DynamicPolicy) dedicatedCoresWithoutNUMABindingHintHandler(_ context.Context,
@@ -180,7 +182,7 @@ func (p *DynamicPolicy) calculateHints(reqInt uint64, resourcesMachineState stat
 		return nil, fmt.Errorf("getBytesPerNUMAFromMachineState failed with error: %v", err)
 	}
 
-	minNUMAsCountNeeded, _, err := util.GetNUMANodesCountToFitMemoryReq(reqInt, bytesPerNUMA, len(machineState))
+	minNUMAsCountNeeded, _, err := qrmutil.GetNUMANodesCountToFitMemoryReq(reqInt, bytesPerNUMA, len(machineState))
 	if err != nil {
 		return nil, fmt.Errorf("GetNUMANodesCountToFitMemoryReq failed with error: %v", err)
 	}
@@ -270,7 +272,21 @@ func (p *DynamicPolicy) getNumaNodesAffinityInfo() ([]util.NumaInfo, error) {
 		for _, containerEntries := range numaState.PodEntries {
 			for _, allocationInfo := range containerEntries {
 				numaNodeInfo.Labels = util.MergeNumaInfoMap(allocationInfo.Labels, numaNodeInfo.Labels)
-				if allocationInfo.Annotations[apiconsts.PodAnnotationMicroTopologyInterPodAntiAffinity] != "" {
+				enhancementKVs := make(map[string]string)
+				err := json.Unmarshal([]byte(allocationInfo.Annotations[apiconsts.PodAnnotationMemoryEnhancementKey]), &enhancementKVs)
+				if err != nil {
+					return nil, err
+				}
+				for key, val := range enhancementKVs {
+					allocationInfo.Annotations[key] = val
+				}
+				if allocationInfo.Annotations[apiconsts.PodAnnotationMemoryEnhancementNumaExclusive] == apiconsts.PodAnnotationMemoryEnhancementNumaExclusiveEnable {
+					numaNodeInfo.Exclusive = true
+				} else {
+					numaNodeInfo.Exclusive = false
+				}
+
+				if util.IsPodAntiAffinity(allocationInfo.Annotations) {
 					podAffinity, err := util.UnmarshalAffinity(allocationInfo.Annotations)
 					if err != nil {
 						return nil, fmt.Errorf("unmarshalAffinity failed")
@@ -295,7 +311,9 @@ func (p *DynamicPolicy) prePodAffinityFilter(req *pluginapi.ResourceRequest) (*u
 	if err != nil {
 		return nil, err
 	}
-	p.state.GetMachineState()
+	if podAffinity.Affinity == nil && podAffinity.AntiAffinity == nil && req.Labels == nil {
+		return nil, nil
+	}
 	// There is no need to do numa level inter-pod affinity selction if exclusive = true
 	if req.Annotations[apiconsts.PodAnnotationMemoryEnhancementNumaExclusive] ==
 		apiconsts.PodAnnotationMemoryEnhancementNumaExclusiveEnable {
@@ -310,7 +328,7 @@ func (p *DynamicPolicy) prePodAffinityFilter(req *pluginapi.ResourceRequest) (*u
 	if err != nil {
 		return nil, err
 	}
-	podAffinityInfo := util.RequiredPodAffinityInfo(podAffinity, req)
+	podAffinityInfo := util.RequiredPodAffinityInfo(podAffinity, req.Labels)
 
 	// Calculate util.TopologyAffinityCount imformation
 	var state = util.PreFilterState{
@@ -320,9 +338,15 @@ func (p *DynamicPolicy) prePodAffinityFilter(req *pluginapi.ResourceRequest) (*u
 		AntiAffinityCounts:         make(util.TopologyAffinityCount),
 		AffinityCounts:             make(util.TopologyAffinityCount),
 	}
-	util.GetExistingAntiAffinityCounts(&state, p.topology)
-	util.GetAntiAffinityCounts(&state, p.topology)
-	util.GetAffinityCounts(&state, p.topology)
+
+	var socket2numaList = make(map[int][]int, p.topology.NumSockets)
+	for i := 0; i < p.topology.NumSockets; i++ {
+		numaList := p.topology.CPUDetails.NUMANodesInSockets(i).ToSliceInt()
+		socket2numaList[i] = numaList
+	}
+	util.GetExistingAntiAffinityCounts(&state, socket2numaList)
+	util.GetAntiAffinityCounts(&state, socket2numaList)
+	util.GetAffinityCounts(&state, socket2numaList)
 
 	return &state, nil
 }
