@@ -34,7 +34,7 @@ type PodInfo struct {
 	QoSResourcesNonZeroRequested *native.QoSResource
 }
 
-// AssumedPodAffinityInfo is record pod affintiy information before cnr updating,
+// AssumedPodAffinityInfo is record pod affinity information before cnr updating,
 // keyed by namespace/podName
 type AssumedPodAffinityInfo map[string]struct {
 	Labels      map[string]string

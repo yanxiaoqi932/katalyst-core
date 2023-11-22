@@ -40,10 +40,9 @@ const (
 	// Using the name of the plugin will likely help us avoid collisions with other plugins.
 	preFilterStateKey = "PreFilter" + NameNUMAInterPodAffinity
 
-	// The maximum number of NUMA nodes that Topology Manager allows is 8
+	// The maximum number of NUMAID that Topology Manager allows is 64
 	// https://kubernetes.io/docs/tasks/administer-cluster/topology-manager/#known-limitations
-	maxAllowableNUMANodes = 8
-	maxNUMAId             = 64
+	maxNUMAId = 64
 )
 
 // key means node name
