@@ -18,7 +18,6 @@ package dynamicpolicy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -271,15 +270,10 @@ func (p *DynamicPolicy) getNumaNodesAffinityInfo() ([]util.NumaInfo, error) {
 		numaState := numaResourceMap[v1.ResourceMemory][i]
 		for _, containerEntries := range numaState.PodEntries {
 			for _, allocationInfo := range containerEntries {
+				if allocationInfo.Annotations[apiconsts.PodAnnotationQoSLevelKey] != apiconsts.PodAnnotationQoSLevelDedicatedCores {
+					continue
+				}
 				numaNodeInfo.Labels = util.MergeNumaInfoMap(allocationInfo.Labels, numaNodeInfo.Labels)
-				enhancementKVs := make(map[string]string)
-				err := json.Unmarshal([]byte(allocationInfo.Annotations[apiconsts.PodAnnotationMemoryEnhancementKey]), &enhancementKVs)
-				if err != nil {
-					return nil, err
-				}
-				for key, val := range enhancementKVs {
-					allocationInfo.Annotations[key] = val
-				}
 				if allocationInfo.Annotations[apiconsts.PodAnnotationMemoryEnhancementNumaExclusive] == apiconsts.PodAnnotationMemoryEnhancementNumaExclusiveEnable {
 					numaNodeInfo.Exclusive = true
 				} else {

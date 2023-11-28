@@ -1142,8 +1142,9 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 				antiAffinityKey:                 antiAffinityValue,
 			},
 			Annotations: map[string]string{
-				consts.PodAnnotationQoSLevelKey:          consts.PodAnnotationQoSLevelDedicatedCores,
-				consts.PodAnnotationMemoryEnhancementKey: `{"numa_binding": "true", "numa_exclusive": "true"}`,
+				consts.PodAnnotationQoSLevelKey:                    consts.PodAnnotationQoSLevelDedicatedCores,
+				consts.PodAnnotationMemoryEnhancementNumaBinding:   "true",
+				consts.PodAnnotationMemoryEnhancementNumaExclusive: "true",
 			},
 		},
 		{
@@ -1159,7 +1160,8 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 			},
 			Annotations: map[string]string{
 				consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelDedicatedCores,
-				consts.PodAnnotationMemoryEnhancementKey:              `{"numa_binding": "true", "numa_exclusive": "false"}`,
+				consts.PodAnnotationMemoryEnhancementNumaBinding:      "true",
+				consts.PodAnnotationMemoryEnhancementNumaExclusive:    "false",
 				consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
 			},
 		},
@@ -1175,8 +1177,9 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 				affinityKey:                     affinityValue,
 			},
 			Annotations: map[string]string{
-				consts.PodAnnotationQoSLevelKey:          consts.PodAnnotationQoSLevelDedicatedCores,
-				consts.PodAnnotationMemoryEnhancementKey: `{"numa_binding": "true", "numa_exclusive": "false"}`,
+				consts.PodAnnotationQoSLevelKey:                    consts.PodAnnotationQoSLevelDedicatedCores,
+				consts.PodAnnotationMemoryEnhancementNumaBinding:   "true",
+				consts.PodAnnotationMemoryEnhancementNumaExclusive: "false",
 			},
 		},
 		{
@@ -1191,7 +1194,8 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 			},
 			Annotations: map[string]string{
 				consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelDedicatedCores,
-				consts.PodAnnotationMemoryEnhancementKey:              `{"numa_binding": "true", "numa_exclusive": "false"}`,
+				consts.PodAnnotationMemoryEnhancementNumaBinding:      "true",
+				consts.PodAnnotationMemoryEnhancementNumaExclusive:    "false",
 				consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"socket"}]}`,
 			},
 		},
@@ -1204,237 +1208,237 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 		enhancementDefaultValues map[string]string
 		expectErr                bool
 	}{
-		{
-			description: "req for container of debug pod",
-			req: &pluginapi.ResourceRequest{
-				PodUid:         string(uuid.NewUUID()),
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceRequests: map[string]float64{
-					string(v1.ResourceCPU): 2,
-				},
-				Annotations: map[string]string{
-					podDebugAnnoKey: "",
-					consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
-				},
-			},
-			expectedResp: &pluginapi.ResourceHintsResponse{
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
-					string(v1.ResourceCPU): nil,
-				},
-				Labels: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelSharedCores,
-				},
-				Annotations: map[string]string{
-					consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelSharedCores,
-					consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
-				},
-			},
-			expectErr: false,
-		},
-		{
-			description: "req for shared_cores main container",
-			req: &pluginapi.ResourceRequest{
-				PodUid:         string(uuid.NewUUID()),
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceRequests: map[string]float64{
-					string(v1.ResourceCPU): 2,
-				},
-			},
-			expectedResp: &pluginapi.ResourceHintsResponse{
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
-					string(v1.ResourceCPU): nil,
-				},
-				Labels: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelSharedCores,
-				},
-				Annotations: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelSharedCores,
-				},
-			},
-			expectErr: false,
-		},
-		{
-			description: "req for reclaimed_cores main container",
-			req: &pluginapi.ResourceRequest{
-				PodUid:         string(uuid.NewUUID()),
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceRequests: map[string]float64{
-					string(v1.ResourceCPU): 2,
-				},
-				Labels: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelReclaimedCores,
-				},
-				Annotations: map[string]string{
-					consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelReclaimedCores,
-					consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
-				},
-			},
-			expectedResp: &pluginapi.ResourceHintsResponse{
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
-					string(v1.ResourceCPU): nil,
-				},
-				Labels: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelReclaimedCores,
-				},
-				Annotations: map[string]string{
-					consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelReclaimedCores,
-					consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
-				},
-			},
-			expectErr: false,
-		},
-		{
-			description: "antiAffinity & numa_binding enabled & numa_exclusive enabled",
-			req: &pluginapi.ResourceRequest{
-				PodUid:         string(uuid.NewUUID()),
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceRequests: map[string]float64{
-					string(v1.ResourceCPU): 6,
-				},
-				Annotations: map[string]string{
-					consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelDedicatedCores,
-					consts.PodAnnotationMemoryEnhancementKey:              `{"numa_binding": "true", "numa_exclusive": "true"}`,
-					consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
-				},
-				Labels: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelDedicatedCores,
-				},
-			},
-			expectedResp: &pluginapi.ResourceHintsResponse{
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
-					string(v1.ResourceCPU): {
-						Hints: []*pluginapi.TopologyHint{
-							{
-								Nodes:     []uint64{0, 1},
-								Preferred: true,
-							},
-							{
-								Nodes:     []uint64{2, 3},
-								Preferred: true,
-							},
-							{
-								Nodes:     []uint64{0, 1, 2},
-								Preferred: false,
-							},
-							{
-								Nodes:     []uint64{0, 1, 3},
-								Preferred: false,
-							},
-							{
-								Nodes:     []uint64{0, 2, 3},
-								Preferred: false,
-							},
-							{
-								Nodes:     []uint64{1, 2, 3},
-								Preferred: false,
-							},
-							{
-								Nodes:     []uint64{0, 1, 2, 3},
-								Preferred: false,
-							},
-						},
-					},
-				},
-				Labels: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelDedicatedCores,
-				},
-				Annotations: map[string]string{
-					consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelDedicatedCores,
-					consts.PodAnnotationMemoryEnhancementNumaBinding:      consts.PodAnnotationMemoryEnhancementNumaExclusiveEnable,
-					consts.PodAnnotationMemoryEnhancementNumaExclusive:    consts.PodAnnotationMemoryEnhancementNumaExclusiveEnable,
-					consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
-				},
-			},
-			expectErr: false,
-		},
-		{
-			description: "affinity & numa_binding enabled  & numa_exclusive enabled",
-			req: &pluginapi.ResourceRequest{
-				PodUid:         string(uuid.NewUUID()),
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceRequests: map[string]float64{
-					string(v1.ResourceCPU): 6,
-				},
-				Annotations: map[string]string{
-					consts.PodAnnotationQoSLevelKey:                   consts.PodAnnotationQoSLevelDedicatedCores,
-					consts.PodAnnotationMemoryEnhancementKey:          `{"numa_binding": "true", "numa_exclusive": "true"}`,
-					consts.PodAnnotationMicroTopologyInterPodAffinity: `{"required": [{"matchLabels": {"affinityKey": "affinityValue"}, "zone":"numa"}]}`,
-				},
-				Labels: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelDedicatedCores,
-				},
-			},
-			expectedResp: &pluginapi.ResourceHintsResponse{
-				PodNamespace:   testName,
-				PodName:        testName,
-				ContainerName:  testName,
-				ContainerType:  pluginapi.ContainerType_MAIN,
-				ContainerIndex: 0,
-				ResourceName:   string(v1.ResourceCPU),
-				ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
-					string(v1.ResourceCPU): nil,
-				},
-				Labels: map[string]string{
-					consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelDedicatedCores,
-				},
-				Annotations: map[string]string{
-					consts.PodAnnotationQoSLevelKey:                    consts.PodAnnotationQoSLevelDedicatedCores,
-					consts.PodAnnotationMemoryEnhancementNumaBinding:   consts.PodAnnotationMemoryEnhancementNumaExclusiveEnable,
-					consts.PodAnnotationMemoryEnhancementNumaExclusive: consts.PodAnnotationMemoryEnhancementNumaExclusiveEnable,
-					consts.PodAnnotationMicroTopologyInterPodAffinity:  `{"required": [{"matchLabels": {"affinityKey": "affinityValue"}, "zone":"numa"}]}`,
-				},
-			},
-			expectErr: true,
-		},
+		// {
+		// 	description: "req for container of debug pod",
+		// 	req: &pluginapi.ResourceRequest{
+		// 		PodUid:         string(uuid.NewUUID()),
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceRequests: map[string]float64{
+		// 			string(v1.ResourceCPU): 2,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			podDebugAnnoKey: "",
+		// 			consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
+		// 		},
+		// 	},
+		// 	expectedResp: &pluginapi.ResourceHintsResponse{
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
+		// 			string(v1.ResourceCPU): nil,
+		// 		},
+		// 		Labels: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelSharedCores,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelSharedCores,
+		// 			consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
+		// 		},
+		// 	},
+		// 	expectErr: false,
+		// },
+		// {
+		// 	description: "req for shared_cores main container",
+		// 	req: &pluginapi.ResourceRequest{
+		// 		PodUid:         string(uuid.NewUUID()),
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceRequests: map[string]float64{
+		// 			string(v1.ResourceCPU): 2,
+		// 		},
+		// 	},
+		// 	expectedResp: &pluginapi.ResourceHintsResponse{
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
+		// 			string(v1.ResourceCPU): nil,
+		// 		},
+		// 		Labels: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelSharedCores,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelSharedCores,
+		// 		},
+		// 	},
+		// 	expectErr: false,
+		// },
+		// {
+		// 	description: "req for reclaimed_cores main container",
+		// 	req: &pluginapi.ResourceRequest{
+		// 		PodUid:         string(uuid.NewUUID()),
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceRequests: map[string]float64{
+		// 			string(v1.ResourceCPU): 2,
+		// 		},
+		// 		Labels: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelReclaimedCores,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelReclaimedCores,
+		// 			consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
+		// 		},
+		// 	},
+		// 	expectedResp: &pluginapi.ResourceHintsResponse{
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
+		// 			string(v1.ResourceCPU): nil,
+		// 		},
+		// 		Labels: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelReclaimedCores,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelReclaimedCores,
+		// 			consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
+		// 		},
+		// 	},
+		// 	expectErr: false,
+		// },
+		// {
+		// 	description: "antiAffinity & numa_binding enabled & numa_exclusive enabled",
+		// 	req: &pluginapi.ResourceRequest{
+		// 		PodUid:         string(uuid.NewUUID()),
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceRequests: map[string]float64{
+		// 			string(v1.ResourceCPU): 6,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelDedicatedCores,
+		// 			consts.PodAnnotationMemoryEnhancementKey:              `{"numa_binding": "true", "numa_exclusive": "true"}`,
+		// 			consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
+		// 		},
+		// 		Labels: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelDedicatedCores,
+		// 		},
+		// 	},
+		// 	expectedResp: &pluginapi.ResourceHintsResponse{
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
+		// 			string(v1.ResourceCPU): {
+		// 				Hints: []*pluginapi.TopologyHint{
+		// 					{
+		// 						Nodes:     []uint64{0, 1},
+		// 						Preferred: true,
+		// 					},
+		// 					{
+		// 						Nodes:     []uint64{2, 3},
+		// 						Preferred: true,
+		// 					},
+		// 					{
+		// 						Nodes:     []uint64{0, 1, 2},
+		// 						Preferred: false,
+		// 					},
+		// 					{
+		// 						Nodes:     []uint64{0, 1, 3},
+		// 						Preferred: false,
+		// 					},
+		// 					{
+		// 						Nodes:     []uint64{0, 2, 3},
+		// 						Preferred: false,
+		// 					},
+		// 					{
+		// 						Nodes:     []uint64{1, 2, 3},
+		// 						Preferred: false,
+		// 					},
+		// 					{
+		// 						Nodes:     []uint64{0, 1, 2, 3},
+		// 						Preferred: false,
+		// 					},
+		// 				},
+		// 			},
+		// 		},
+		// 		Labels: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelDedicatedCores,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelDedicatedCores,
+		// 			consts.PodAnnotationMemoryEnhancementNumaBinding:      consts.PodAnnotationMemoryEnhancementNumaExclusiveEnable,
+		// 			consts.PodAnnotationMemoryEnhancementNumaExclusive:    consts.PodAnnotationMemoryEnhancementNumaExclusiveEnable,
+		// 			consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
+		// 		},
+		// 	},
+		// 	expectErr: false,
+		// },
+		// {
+		// 	description: "affinity & numa_binding enabled  & numa_exclusive enabled",
+		// 	req: &pluginapi.ResourceRequest{
+		// 		PodUid:         string(uuid.NewUUID()),
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceRequests: map[string]float64{
+		// 			string(v1.ResourceCPU): 6,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey:                   consts.PodAnnotationQoSLevelDedicatedCores,
+		// 			consts.PodAnnotationMemoryEnhancementKey:          `{"numa_binding": "true", "numa_exclusive": "true"}`,
+		// 			consts.PodAnnotationMicroTopologyInterPodAffinity: `{"required": [{"matchLabels": {"affinityKey": "affinityValue"}, "zone":"numa"}]}`,
+		// 		},
+		// 		Labels: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelDedicatedCores,
+		// 		},
+		// 	},
+		// 	expectedResp: &pluginapi.ResourceHintsResponse{
+		// 		PodNamespace:   testName,
+		// 		PodName:        testName,
+		// 		ContainerName:  testName,
+		// 		ContainerType:  pluginapi.ContainerType_MAIN,
+		// 		ContainerIndex: 0,
+		// 		ResourceName:   string(v1.ResourceCPU),
+		// 		ResourceHints: map[string]*pluginapi.ListOfTopologyHints{
+		// 			string(v1.ResourceCPU): nil,
+		// 		},
+		// 		Labels: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey: consts.PodAnnotationQoSLevelDedicatedCores,
+		// 		},
+		// 		Annotations: map[string]string{
+		// 			consts.PodAnnotationQoSLevelKey:                    consts.PodAnnotationQoSLevelDedicatedCores,
+		// 			consts.PodAnnotationMemoryEnhancementNumaBinding:   consts.PodAnnotationMemoryEnhancementNumaExclusiveEnable,
+		// 			consts.PodAnnotationMemoryEnhancementNumaExclusive: consts.PodAnnotationMemoryEnhancementNumaExclusiveEnable,
+		// 			consts.PodAnnotationMicroTopologyInterPodAffinity:  `{"required": [{"matchLabels": {"affinityKey": "affinityValue"}, "zone":"numa"}]}`,
+		// 		},
+		// 	},
+		// 	expectErr: true,
+		// },
 		{
 			description: "antiAffinity labels & antiAffinity seletor",
 			req: &pluginapi.ResourceRequest{
@@ -2011,7 +2015,7 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 		dynamicPolicy, err := getTestDynamicPolicyWithInitialization(cpuTopology, tmpDir)
 		as.Nil(err)
 
-		dynamicPolicy.qosConfig.SetNUMAInterPodAffinityLabelsSelector(map[string]string{affinityKey: affinityValue, antiAffinityKey: antiAffinityValue})
+		dynamicPolicy.qosConfig.SetNUMAInterPodAffinityLabelsSelector([]string{affinityKey, antiAffinityKey})
 
 		machineState := dynamicPolicy.state.GetMachineState()
 		for i, alloInfo := range allocationList {

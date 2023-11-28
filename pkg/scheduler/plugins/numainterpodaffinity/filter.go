@@ -493,6 +493,11 @@ func (na *NUMAInterPodAffinity) Filter(ctx context.Context, cycleState *framewor
 }
 
 func unmarshalAnnotation(annotation map[string]string) (map[string]string, error) {
+	if annotation[consts.PodAnnotationMemoryEnhancementNumaBinding] != "" &&
+		annotation[consts.PodAnnotationMemoryEnhancementNumaExclusive] != "" {
+		return annotation, nil
+	}
+
 	enhancementKVs := make(map[string]string)
 	err := json.Unmarshal([]byte(annotation[consts.PodAnnotationMemoryEnhancementKey]), &enhancementKVs)
 	if err != nil {

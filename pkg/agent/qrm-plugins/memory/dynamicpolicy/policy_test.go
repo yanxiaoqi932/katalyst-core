@@ -1278,8 +1278,9 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 				antiAffinityKey:                 antiAffinityValue,
 			},
 			Annotations: map[string]string{
-				consts.PodAnnotationQoSLevelKey:          consts.PodAnnotationQoSLevelDedicatedCores,
-				consts.PodAnnotationMemoryEnhancementKey: `{"numa_binding": "true", "numa_exclusive": "true"}`,
+				consts.PodAnnotationQoSLevelKey:                    consts.PodAnnotationQoSLevelDedicatedCores,
+				consts.PodAnnotationMemoryEnhancementNumaBinding:   "true",
+				consts.PodAnnotationMemoryEnhancementNumaExclusive: "true",
 			},
 		},
 		{
@@ -1295,7 +1296,8 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 			},
 			Annotations: map[string]string{
 				consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelDedicatedCores,
-				consts.PodAnnotationMemoryEnhancementKey:              `{"numa_binding": "true", "numa_exclusive": "false"}`,
+				consts.PodAnnotationMemoryEnhancementNumaBinding:      "true",
+				consts.PodAnnotationMemoryEnhancementNumaExclusive:    "false",
 				consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"numa"}]}`,
 			},
 		},
@@ -1311,8 +1313,9 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 				affinityKey:                     affinityValue,
 			},
 			Annotations: map[string]string{
-				consts.PodAnnotationQoSLevelKey:          consts.PodAnnotationQoSLevelDedicatedCores,
-				consts.PodAnnotationMemoryEnhancementKey: `{"numa_binding": "true", "numa_exclusive": "false"}`,
+				consts.PodAnnotationQoSLevelKey:                    consts.PodAnnotationQoSLevelDedicatedCores,
+				consts.PodAnnotationMemoryEnhancementNumaBinding:   "true",
+				consts.PodAnnotationMemoryEnhancementNumaExclusive: "false",
 			},
 		},
 		{
@@ -1327,7 +1330,8 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 			},
 			Annotations: map[string]string{
 				consts.PodAnnotationQoSLevelKey:                       consts.PodAnnotationQoSLevelDedicatedCores,
-				consts.PodAnnotationMemoryEnhancementKey:              `{"numa_binding": "true", "numa_exclusive": "false"}`,
+				consts.PodAnnotationMemoryEnhancementNumaBinding:      "true",
+				consts.PodAnnotationMemoryEnhancementNumaExclusive:    "false",
 				consts.PodAnnotationMicroTopologyInterPodAntiAffinity: `{"required": [{"matchLabels": {"antiAffinityKey": "antiAffinityValue"}, "zone":"socket"}]}`,
 			},
 		},
@@ -2147,7 +2151,7 @@ func TestGetInterPodAffinityTopologyHints(t *testing.T) {
 		dynamicPolicy, err := getTestDynamicPolicyWithInitialization(cpuTopology, machineInfo, tmpDir)
 		as.Nil(err)
 
-		dynamicPolicy.qosConfig.SetNUMAInterPodAffinityLabelsSelector(map[string]string{affinityKey: affinityValue, antiAffinityKey: antiAffinityValue})
+		dynamicPolicy.qosConfig.SetNUMAInterPodAffinityLabelsSelector([]string{affinityKey, antiAffinityKey})
 
 		machineState := dynamicPolicy.state.GetMachineState()
 		for i, alloInfo := range allocationList {
