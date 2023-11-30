@@ -245,7 +245,18 @@ func (n *NodeInfo) GetResourceTopologyCopy(filterFn podFilter) *ResourceTopology
 func (n *NodeInfo) GetAssumedPodAffinityInfo() AssumedPodAffinityInfo {
 	n.Mutex.RLock()
 	defer n.Mutex.RUnlock()
-	return n.AssumedPodAffinityInfo
+	// Perform a deep copy of n.AssumedPodAffinityInfo
+	var copyAssumedPodAffinityInfo = make(AssumedPodAffinityInfo)
+	for key, value := range n.AssumedPodAffinityInfo {
+		copyAssumedPodAffinityInfo[key] = struct {
+			Labels      map[string]string
+			Annotations map[string]string
+		}{
+			Labels:      value.Labels,
+			Annotations: value.Annotations,
+		}
+	}
+	return copyAssumedPodAffinityInfo
 }
 
 func (n *NodeInfo) AddAssumedPodAffinity(pod *v1.Pod) {
